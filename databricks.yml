@@ -1,0 +1,225 @@
+bundle:
+  name: salesforce_operator_hackathon
+  engine: direct
+
+# Variables for configuration
+variables:
+  salesforce_conn_id:
+    description: "Unity Catalog Connection ID for Salesforce"
+    default: "salesforce_u2m_conn"
+
+  salesforce_object:
+    description: "Salesforce object to sync (e.g., Account, Contact)"
+    default: "Account"
+
+  salesforce_external_id:
+    description: "External ID field for upsert operations"
+    default: "AccountNumber"
+
+# Deployment targets
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://e2-dogfood.staging.cloud.databricks.com
+      profile: dogfood
+
+    variables:
+      salesforce_conn_id: "salesforce_u2m_conn"
+
+# Resources
+resources:
+  jobs:
+    # Example 1: Function + Sensor pattern (recommended)
+    salesforce_upsert_with_sensor:
+      name: "[Hackathon] Salesforce Upsert with Sensor"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - ./dist/*.whl
+
+      tasks:
+        # Task 1: Execute upsert (function - runs once)
+        - task_key: upsert_accounts
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.salesforce_upsert
+            parameters:
+              - name: object_name
+                value: ${var.salesforce_object}
+              - name: external_id_field
+                value: ${var.salesforce_external_id}
+              - name: records
+                value: |
+                  [
+                    {"AccountNumber": "HACK001", "Name": "Hackathon Test Account 1", "Industry": "Technology"},
+                    {"AccountNumber": "HACK002", "Name": "Hackathon Test Account 2", "Industry": "Finance"}
+                  ]
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+              - name: wait_for_completion
+                value: "false"
+
+        # Task 2: Wait for completion (sensor - defers compute!)
+        - task_key: wait_for_completion
+          depends_on:
+            - task_key: upsert_accounts
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.SalesforceBulkJobSensor
+            parameters:
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+              - name: task_key
+                value: "upsert_accounts"
+              - name: poll_interval_minutes
+                value: "1"
+
+    # Example 2: Full operator pattern (generic bulk write operator)
+    salesforce_upsert_operator:
+      name: "[Hackathon] Salesforce Bulk Write Operator (Upsert)"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - ./dist/*.whl
+
+      tasks:
+        - task_key: upsert_with_operator
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.SalesforceBulkWriteOperator
+            parameters:
+              - name: object_name
+                value: ${var.salesforce_object}
+              - name: operation
+                value: "upsert"
+              - name: external_id_field
+                value: ${var.salesforce_external_id}
+              - name: records
+                value: |
+                  [
+                    {"AccountNumber": "OPS001", "Name": "Operator Test Account 1"},
+                    {"AccountNumber": "OPS002", "Name": "Operator Test Account 2"}
+                  ]
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+              - name: task_key
+                value: "insert_with_operator"
+              - name: poll_interval_minutes
+                value: "1"
+
+    # Example 2b: Generic operator with insert operation
+    salesforce_insert_operator:
+      name: "[Hackathon] Salesforce Bulk Write Operator (Insert)"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - ./dist/*.whl
+
+      tasks:
+        - task_key: insert_with_operator
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.SalesforceBulkWriteOperator
+            parameters:
+              - name: object_name
+                value: ${var.salesforce_object}
+              - name: operation
+                value: "insert"
+              - name: records
+                value: |
+                  [
+                    {"Name": "Insert Operator Test Account 1", "Industry": "Technology"},
+                    {"Name": "Insert Operator Test Account 2", "Industry": "Finance"}
+                  ]
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+              - name: task_key
+                value: "insert_with_operator"
+              - name: poll_interval_minutes
+                value: "1"
+
+    # Example 3: Multi-step workflow
+    salesforce_full_workflow:
+      name: "[Hackathon] Salesforce Full Workflow"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - ./dist/*.whl
+
+      tasks:
+        # Extract data from SQL (simulated)
+        - task_key: extract_data
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.salesforce_upsert
+            parameters:
+              - name: object_name
+                value: "Account"
+              - name: external_id_field
+                value: "AccountNumber"
+              - name: records
+                value: |
+                  [
+                    {"AccountNumber": "WF001", "Name": "Workflow Account 1", "AnnualRevenue": 1000000},
+                    {"AccountNumber": "WF002", "Name": "Workflow Account 2", "AnnualRevenue": 2000000},
+                    {"AccountNumber": "WF003", "Name": "Workflow Account 3", "AnnualRevenue": 500000}
+                  ]
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+
+        # Wait for Accounts to complete
+        - task_key: wait_accounts
+          depends_on:
+            - task_key: extract_data
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.SalesforceBulkJobSensor
+            parameters:
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+              - name: task_key
+                value: "extract_data"
+
+        # Then sync Contacts
+        - task_key: sync_contacts
+          depends_on:
+            - task_key: wait_accounts
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.salesforce_upsert
+            parameters:
+              - name: object_name
+                value: "Contact"
+              - name: external_id_field
+                value: "Email"
+              - name: records
+                value: |
+                  [
+                    {"Email": "john@wf001.com", "FirstName": "John", "LastName": "Doe"},
+                    {"Email": "jane@wf002.com", "FirstName": "Jane", "LastName": "Smith"}
+                  ]
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+
+        # Wait for Contacts
+        - task_key: wait_contacts
+          depends_on:
+            - task_key: sync_contacts
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.SalesforceBulkJobSensor
+            parameters:
+              - name: conn_id
+                value: ${var.salesforce_conn_id}
+              - name: task_key
+                value: "sync_contacts"

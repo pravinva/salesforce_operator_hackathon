@@ -1,0 +1,44 @@
+bundle:
+  name: salesforce_test
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://e2-dogfood.staging.cloud.databricks.com
+      profile: dogfood
+
+variables:
+  salesforce_conn_id:
+    description: "Unity Catalog Connection ID for Salesforce"
+    default: "salesforce_dev"
+
+environments:
+  - environment_key: default
+    spec:
+      environment_version: "5"
+      dependencies:
+        - ./dist/*.whl
+
+resources:
+  jobs:
+    salesforce_simple_test:
+      name: "[Hackathon Test] Salesforce Simple Upsert"
+
+      tasks:
+        - task_key: test_upsert
+          environment_key: default
+          python_operator_task:
+            main: salesforce_integration.salesforce_upsert
+            parameters:
+              - name: object_name
+                value: "Account"
+              - name: external_id_field
+                value: "AccountNumber"
+              - name: records
+                value: '[{"AccountNumber": "TEST001", "Name": "Hackathon Test Account 1", "Industry": "Technology"}, {"AccountNumber": "TEST002", "Name": "Hackathon Test Account 2", "Industry": "Finance"}]'
+              - name: conn_id
+                value: "salesforce_dev"
+              - name: wait_for_completion
+                value: "true"
