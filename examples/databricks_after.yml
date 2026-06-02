@@ -6,7 +6,6 @@ This is the modern approach using Databricks' new Python operator framework.
 Benefits:
 - 50 lines of YAML configuration
 - $150/month total cost (vs. $1,760/month)
-- Sensors defer compute ($0.04/day vs. $12/day)
 - Single system to manage (no Airflow!)
 - Unity Catalog Connections (no raw credentials)
 - Built-in monitoring and alerting
@@ -77,7 +76,6 @@ resources:
               WHERE updated_date >= CURRENT_DATE - 1
 
         # Task 2: Upsert to Salesforce (Function)
-        # Executes once, no polling, no blocking
         - task_key: upsert_accounts
           depends_on:
             - task_key: extract_accounts
@@ -100,30 +98,9 @@ resources:
               - name: conn_id
                 value: ${var.salesforce_conn_id}
 
-              # Don't wait here - use sensor instead
+              # Wait inside the function for terminal completion
               - name: wait_for_completion
-                value: "false"
-
-        # Task 3: Wait for completion (Sensor)
-        # DEFERS COMPUTE! Cost: $0.04/day vs. $12/day
-        - task_key: wait_for_completion
-          depends_on:
-            - task_key: upsert_accounts
-
-          environment_key: default
-          python_operator_task:
-            main: salesforce_integration.SalesforceBulkJobSensor
-            parameters:
-              - name: conn_id
-                value: ${var.salesforce_conn_id}
-
-              # Auto-inject current task key
-              - name: task_key
-                value: "{{task.name}}"
-
-              # Poll every 1 minute (releases compute between polls!)
-              - name: poll_interval_minutes
-                value: "1"
+                value: "true"
 
 
 """
@@ -139,8 +116,7 @@ COST BREAKDOWN (Monthly):
 
 3. Python Operator Compute:
    - Function execution (seconds): ~$10/month
-   - Sensor with deferral (24-hour): $0.04/day = $1.20/month
-   Total: $11.20/month
+   Total: $10/month
 
 4. Unity Catalog:
    - Connections (credential management): $0 (included)
@@ -162,9 +138,8 @@ CODE COMPLEXITY:
 src/salesforce_integration/
 ├── __init__.py                (35 lines)
 ├── functions.py               (150 lines)
-├── sensors.py                 (120 lines)
 └── operators.py               (150 lines)
-                               Total: 455 lines
+                               Total: 335 lines
 
 databricks.yml                 (50 lines)
 setup.py                       (30 lines)
@@ -180,7 +155,6 @@ OPERATIONAL BENEFITS:
 ✅ Monitoring: Native Databricks UI vs. Custom Airflow + Datadog setup
 ✅ Authentication: UC Connections (SSO-enabled) vs. Raw credentials in Variables
 ✅ Startup time: Seconds (REPL VM) vs. Minutes (cluster spin-up)
-✅ Sensor cost: $0.04/day (deferred) vs. $12/day (blocking)
 ✅ Auto-scaling: Built-in vs. Manual cluster configuration
 ✅ Lineage: Unity Catalog vs. Manual tracking
 ✅ Security: Enterprise-grade vs. Custom implementation

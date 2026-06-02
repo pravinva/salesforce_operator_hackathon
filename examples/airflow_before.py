@@ -6,7 +6,7 @@ Problems:
 - 2,500+ lines of custom code across multiple files
 - $600/month for Airflow infrastructure (HA setup)
 - $800/month for Databricks SQL warehouse (JDBC extracts)
-- Sensors block compute while waiting ($12/day for 24-hour sensor)
+- Polling loops block compute while waiting ($12/day for 24-hour wait loop)
 - Manual chunking, retry logic, error handling
 - Raw credentials in Airflow Variables
 - Complex setup and maintenance
@@ -134,7 +134,7 @@ def load_to_salesforce(**context):
             print(f"Created Salesforce job: {job_id}")
 
             # MANUAL POLLING LOOP - BLOCKS COMPUTE!
-            # This is the main cost driver: $12/day for 24-hour sensor
+            # This is the main cost driver: $12/day for 24-hour wait loop
             max_wait = 3600  # 1 hour timeout
             start_time = time.time()
 
@@ -166,7 +166,7 @@ def load_to_salesforce(**context):
 
                 # BLOCKS COMPUTE WHILE WAITING!
                 # This 10-second sleep happens on a running cluster
-                # For a 24-hour sensor, this costs $12/day!
+                # For a 24-hour wait loop, this costs $12/day!
                 time.sleep(10)
 
         except Exception as e:
@@ -259,8 +259,8 @@ INFRASTRUCTURE COSTS (Monthly):
    - Classic SQL warehouse (Medium): $800/month
    Total: $800/month
 
-3. Compute for sensor polling:
-   - 24-hour sensor blocks cluster: $12/day = $360/month
+3. Compute for polling wait loops:
+   - 24-hour wait loop blocks cluster: $12/day = $360/month
    Total: $360/month
 
 TOTAL MONTHLY COST: $1,760/month ($21,120/year)

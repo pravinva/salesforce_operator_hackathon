@@ -17,7 +17,10 @@ import io
 from typing import Dict, Any, List, Optional
 import requests
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.runtime import dbutils
+try:
+    from databricks.sdk.runtime import dbutils  # type: ignore
+except Exception:  # pragma: no cover - runtime availability differs by execution context
+    dbutils = None
 
 
 def _coerce_records(records: Any) -> List[Dict[str, Any]]:
@@ -47,10 +50,56 @@ def _coerce_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _request_salesforce(
+    w: WorkspaceClient,
+    conn_id: str,
+    api_version: str,
+    method: str,
+    resource_path: str,
+    **kwargs: Any,
+) -> requests.Response:
+    """
+    Send request through UC proxy and support both connection host styles:
+    1) host-only connection: prefix /services/data/{api_version}
+    2) connection already configured with base_path: use resource path directly
+    """
+    proxy_base_url = f"{w.config.host}/api/2.0/unity-catalog/connections/{conn_id}/proxy"
+    candidate_paths = [f"/services/data/{api_version}{resource_path}", resource_path]
+
+    merged_headers = {
+        **w.config.authenticate(),
+        "Accept": "application/json",
+        "Accept-Encoding": "identity",
+    }
+    if kwargs.get("headers"):
+        merged_headers.update(kwargs["headers"])
+    kwargs["headers"] = merged_headers
+
+    last_response = None
+    for idx, path in enumerate(candidate_paths):
+        response = requests.request(method, f"{proxy_base_url}{path}", **kwargs)
+        last_response = response
+        should_fallback = idx == 0 and response.status_code == 404
+        if not should_fallback:
+            return response
+        print("[salesforce_integration] path fallback: retrying with connection base_path")
+    return last_response  # type: ignore[return-value]
+
+
+def _set_task_value(key: str, value: str) -> None:
+    if dbutils is None:
+        return
+    try:
+        dbutils.jobs.taskValues.set(key, value)
+    except Exception:
+        # Task values are best-effort metadata, not required for core write flow.
+        pass
+
+
 def salesforce_upsert(
     object_name: str,
     external_id_field: str,
-    records: List[Dict[str, Any]],
+    records: str,
     conn_id: str,
     api_version: str = "v60.0",
     wait_for_completion: bool = False,
@@ -67,8 +116,7 @@ def salesforce_upsert(
         records: List of dictionaries containing record data
         conn_id: Unity Catalog Connection ID for Salesforce
         api_version: Salesforce API version (default: "v60.0")
-        wait_for_completion: If True, polls until job completes (not recommended,
-                           use SalesforceBulkJobSensor instead)
+        wait_for_completion: If True, polls until job completes.
 
     Returns:
         Dictionary containing:
@@ -104,7 +152,7 @@ def salesforce_upsert(
 
 def salesforce_insert(
     object_name: str,
-    records: List[Dict[str, Any]],
+    records: str,
     conn_id: str,
     api_version: str = "v60.0",
     wait_for_completion: bool = False,
@@ -136,7 +184,7 @@ def salesforce_insert(
 
 def salesforce_update(
     object_name: str,
-    records: List[Dict[str, Any]],
+    records: str,
     conn_id: str,
     api_version: str = "v60.0",
     wait_for_completion: bool = False,
@@ -168,7 +216,7 @@ def salesforce_update(
 
 def salesforce_delete(
     object_name: str,
-    records: List[Dict[str, Any]],
+    records: str,
     conn_id: str,
     api_version: str = "v60.0",
     wait_for_completion: bool = False,
@@ -201,7 +249,7 @@ def salesforce_delete(
 def _salesforce_bulk_operation(
     object_name: str,
     operation: str,
-    records: List[Dict[str, Any]],
+    records: Any,
     conn_id: str,
     api_version: str = "v60.0",
     external_id_field: Optional[str] = None,
@@ -225,24 +273,21 @@ def _salesforce_bulk_operation(
     create_job_payload = {
         "object": object_name,
         "operation": operation,
+        "lineEnding": "LF",
     }
 
     if external_id_field:
         create_job_payload["externalIdFieldName"] = external_id_field
 
-    # Use UC Connection proxy - credentials never touch our code!
-    proxy_base_url = f"{w.config.host}/api/2.0/unity-catalog/connections/{conn_id}/proxy"
-
     print(f"[Salesforce] Creating {operation} job for {object_name}...")
 
-    create_job_response = requests.post(
-        f"{proxy_base_url}/services/data/{api_version}/jobs/ingest",
-        headers={
-            **w.config.authenticate(),
-            "Accept": "application/json",
-            "Accept-Encoding": "identity",
-            "Content-Type": "application/json",
-        },
+    create_job_response = _request_salesforce(
+        w,
+        conn_id,
+        api_version,
+        "POST",
+        "/jobs/ingest",
+        headers={"Content-Type": "application/json"},
         json=create_job_payload,
     )
 
@@ -260,14 +305,13 @@ def _salesforce_bulk_operation(
     # Step 2: Upload CSV data
     print(f"[Salesforce] Uploading {len(records)} records...")
 
-    upload_response = requests.put(
-        f"{proxy_base_url}/services/data/{api_version}/jobs/ingest/{job_id}/batches",
-        headers={
-            **w.config.authenticate(),
-            "Content-Type": "text/csv",
-            "Accept": "application/json",
-            "Accept-Encoding": "identity",
-        },
+    upload_response = _request_salesforce(
+        w,
+        conn_id,
+        api_version,
+        "PUT",
+        f"/jobs/ingest/{job_id}/batches",
+        headers={"Content-Type": "text/csv"},
         data=csv_data,
     )
 
@@ -280,14 +324,13 @@ def _salesforce_bulk_operation(
     print(f"[Salesforce] Data uploaded successfully")
 
     # Step 3: Mark job as UploadComplete to start processing
-    close_job_response = requests.patch(
-        f"{proxy_base_url}/services/data/{api_version}/jobs/ingest/{job_id}",
-        headers={
-            **w.config.authenticate(),
-            "Accept": "application/json",
-            "Accept-Encoding": "identity",
-            "Content-Type": "application/json",
-        },
+    close_job_response = _request_salesforce(
+        w,
+        conn_id,
+        api_version,
+        "PATCH",
+        f"/jobs/ingest/{job_id}",
+        headers={"Content-Type": "application/json"},
         json={"state": "UploadComplete"},
     )
 
@@ -311,27 +354,21 @@ def _salesforce_bulk_operation(
         "conn_id": conn_id,
     }
 
-    # Store job_id in task values for downstream sensor
-    try:
-        dbutils.jobs.taskValues.set("salesforce_job_id", job_id)
-        dbutils.jobs.taskValues.set("salesforce_object", object_name)
-        dbutils.jobs.taskValues.set("salesforce_operation", operation)
-    except Exception as e:
-        # dbutils may not be available in local testing
-        print(f"[Warning] Could not set task values: {e}")
+    # Store metadata in task values for downstream tasks (best effort).
+    _set_task_value("salesforce_job_id", job_id)
+    _set_task_value("salesforce_object", object_name)
+    _set_task_value("salesforce_operation", operation)
 
     if wait_for_completion:
-        print("[Warning] wait_for_completion=True blocks compute. Use SalesforceBulkJobSensor instead!")
-        # Poll job status (not recommended - use sensor instead)
+        # Poll job status until terminal state
         import time
         while True:
-            status_response = requests.get(
-                f"{proxy_base_url}/services/data/{api_version}/jobs/ingest/{job_id}",
-                headers={
-                    **w.config.authenticate(),
-                    "Accept": "application/json",
-                    "Accept-Encoding": "identity",
-                },
+            status_response = _request_salesforce(
+                w,
+                conn_id,
+                api_version,
+                "GET",
+                f"/jobs/ingest/{job_id}",
             )
             status_data = status_response.json()
             state = status_data["state"]
@@ -375,7 +412,12 @@ def _records_to_csv(records: List[Dict[str, Any]]) -> str:
 
     # Create CSV
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
+    writer = csv.DictWriter(
+        output,
+        fieldnames=fieldnames,
+        extrasaction='ignore',
+        lineterminator="\n",
+    )
 
     writer.writeheader()
     writer.writerows(records)

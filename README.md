@@ -16,13 +16,12 @@ This repository provides a Databricks-native orchestration model for Salesforce 
 The implementation is packaged as a Databricks Asset Bundle with reusable integration primitives:
 
 - **Functions** for one-shot write operations
-- **Sensors** for deferred completion checks
 - **Operators** for lifecycle orchestration (`open`, `poll`, `close`)
 - **Unity Catalog HTTP connections** for authentication without raw secrets in task code
 
 ## Repository structure
 
-- `src/salesforce_integration/`: Core integration package (functions, sensors, operators)
+- `src/salesforce_integration/`: Core integration package (functions and operators)
 - `databricks.yml`: Primary Databricks Asset Bundle definition
 - `docs/`: Runbooks, setup guides, and archived context
 - `scripts/`: Operational helper scripts grouped by integration domain
@@ -67,18 +66,11 @@ Lifecycle responsibilities:
 - `poll()`: check terminal status and defer between checks
 - `close()`: cleanup hook for cancellation/termination scenarios
 
-## Sensors
-
-`SalesforceBulkJobSensor` supports deferred execution and state polling for submitted Bulk API jobs. This allows long-running waits without holding compute continuously.
-
-Use this pattern when you want to split write submission and completion monitoring into distinct tasks.
-
 ## Airflow migration model
 
 This solution supports straightforward migration from Airflow task patterns:
 
 - Airflow `PythonOperator` write call -> Databricks function task
-- Airflow polling sensor -> Databricks deferred sensor task
 - Airflow custom operator -> Databricks Python operator lifecycle class
 
 Migration objective:
@@ -98,9 +90,9 @@ databricks bundle deploy --profile dogfood
 Run representative jobs:
 
 ```bash
-databricks bundle run salesforce_upsert_with_sensor --profile dogfood
 databricks bundle run salesforce_upsert_operator --profile dogfood
 databricks bundle run salesforce_insert_operator --profile dogfood
+databricks bundle run salesforce_full_workflow --profile dogfood
 ```
 
 ## Runtime customization

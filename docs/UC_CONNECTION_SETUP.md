@@ -128,12 +128,12 @@ Once the connection is created and tested:
 
 2. **Run a test job**:
    ```bash
-   databricks bundle run salesforce_upsert_with_sensor --profile dogfood
+   databricks bundle run salesforce_upsert_operator --profile dogfood
    ```
 
 3. **Monitor in UI**:
-   - Go to Workflows → salesforce_upsert_with_sensor
-   - Watch the sensor defer compute between polls!
+   - Go to Workflows → salesforce_upsert_operator
+   - Validate function/operator task lifecycle and results.
 
 ## Security Best Practices
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "salesforce_integration"
-version = "1.0.0"
+version = "1.0.1"
 description = "Salesforce integration for Databricks Python Operator Framework - Hackathon 2026"
 readme = "README.md"
 authors = [

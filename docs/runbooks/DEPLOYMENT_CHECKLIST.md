@@ -29,16 +29,16 @@ databricks bundle deploy --profile dogfood
 ## 3) Execute validation jobs
 
 ```bash
-databricks bundle run salesforce_upsert_with_sensor --profile dogfood
 databricks bundle run salesforce_upsert_operator --profile dogfood
 databricks bundle run salesforce_insert_operator --profile dogfood
+databricks bundle run salesforce_full_workflow --profile dogfood
 ```
 
 ## 4) Validate runtime behavior
 
 - Confirm task execution succeeded in Databricks Workflows UI.
 - Confirm expected Salesforce records were written.
-- Confirm sensor/operator behavior is observable in logs and task state.
+- Confirm function/operator behavior is observable in logs and task state.
 
 ## 5) Post-deployment checks
 

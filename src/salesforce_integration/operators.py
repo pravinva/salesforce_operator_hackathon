@@ -5,7 +5,7 @@ Operators provide full lifecycle management: open (start work), poll (check stat
 and close (cleanup on cancellation).
 
 Note: OperatorV0 is currently available. close() is NOT yet called on cancellation
-in the current version, so external jobs may leak. Use sensors for most use cases.
+in the current version, so external jobs may leak.
 """
 
 import datetime
@@ -14,8 +14,11 @@ from typing import Dict, Any, List, Optional
 
 import requests
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.runtime import dbutils
 from python_operator_task import OperatorV0, SensorResult
+try:
+    from databricks.sdk.runtime import dbutils  # type: ignore
+except Exception:  # pragma: no cover - runtime availability differs by execution context
+    dbutils = None
 
 from salesforce_integration.functions import _records_to_csv
 
@@ -36,12 +39,12 @@ class SalesforceBulkWriteOperator(OperatorV0):
         self,
         object_name: str,
         operation: str,
-        records: Any,
+        records: str,
         conn_id: str,
         task_key: str,
-        external_id_field: Optional[str] = None,
+        external_id_field: str = "",
         api_version: str = "v60.0",
-        poll_interval_minutes: Any = 1,
+        poll_interval_minutes: int = 1,
     ):
         self.object_name = object_name
         self.operation = operation
@@ -59,6 +62,23 @@ class SalesforceBulkWriteOperator(OperatorV0):
             f"{self.w.config.host}/api/2.0/unity-catalog/connections/"
             f"{self.conn_id}/proxy"
         )
+        self.job_id = ""
+
+    def _set_task_value(self, key: str, value: str) -> None:
+        if dbutils is None:
+            return
+        try:
+            dbutils.jobs.taskValues.set(key, value)
+        except Exception:
+            pass
+
+    def _get_task_value(self, key: str, default: str = "") -> str:
+        if dbutils is None:
+            return default
+        try:
+            return dbutils.jobs.taskValues.get(self.task_key, key, default=default)
+        except Exception:
+            return default
 
     @staticmethod
     def _coerce_records(records: Any) -> List[Dict[str, Any]]:
@@ -169,11 +189,12 @@ class SalesforceBulkWriteOperator(OperatorV0):
 
         job_data = create_job_response.json()
         job_id = job_data["id"]
+        self.job_id = job_id
         print(f"[SalesforceBulkWriteOperator] Job created: {job_id}")
 
-        dbutils.jobs.taskValues.set("salesforce_job_id", job_id)
-        dbutils.jobs.taskValues.set("salesforce_operation", self.operation)
-        dbutils.jobs.taskValues.set("salesforce_object", self.object_name)
+        self._set_task_value("salesforce_job_id", job_id)
+        self._set_task_value("salesforce_operation", self.operation)
+        self._set_task_value("salesforce_object", self.object_name)
 
         upload_response = self._request_salesforce(
             "PUT",
@@ -207,9 +228,7 @@ class SalesforceBulkWriteOperator(OperatorV0):
 
     def poll(self) -> SensorResult:
         """Poll job status and defer compute while the job is running."""
-        job_id = dbutils.jobs.taskValues.get(
-            self.task_key, "salesforce_job_id", default=None
-        )
+        job_id = self._get_task_value("salesforce_job_id", default=self.job_id)
         if not job_id:
             raise ValueError(
                 "Could not load salesforce_job_id from task values; "
@@ -233,8 +252,8 @@ class SalesforceBulkWriteOperator(OperatorV0):
         )
 
         if job_state == "JobComplete":
-            dbutils.jobs.taskValues.set("records_processed", str(records_processed))
-            dbutils.jobs.taskValues.set("records_failed", str(records_failed))
+            self._set_task_value("records_processed", str(records_processed))
+            self._set_task_value("records_failed", str(records_failed))
             print("[SalesforceBulkWriteOperator] Job completed successfully")
             return SensorResult.completed()
 
@@ -258,9 +277,7 @@ class SalesforceBulkWriteOperator(OperatorV0):
         """
         print("[SalesforceBulkWriteOperator] close() called")
 
-        job_id = dbutils.jobs.taskValues.get(
-            self.task_key, "salesforce_job_id", default=""
-        )
+        job_id = self._get_task_value("salesforce_job_id", default=self.job_id)
         if not job_id:
             print("[SalesforceBulkWriteOperator] No job_id found, nothing to clean up")
             return
@@ -305,7 +322,7 @@ class SalesforceUpsertOperator(SalesforceBulkWriteOperator):
         self,
         object_name: str,
         external_id_field: str,
-        records: List[Dict[str, Any]],
+        records: str,
         conn_id: str,
         task_key: str,
         api_version: str = "v60.0",
