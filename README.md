@@ -22,11 +22,12 @@ The implementation is packaged as a Databricks Asset Bundle with reusable integr
 
 ## Repository structure
 
-- `src/salesforce_integration/functions.py`: Independent function entry points
-- `src/salesforce_integration/sensors.py`: Deferred sensor primitives
-- `src/salesforce_integration/operators.py`: Operator lifecycle primitives
-- `databricks.yml`: Bundle variables, jobs, and deployment target configuration
-- `docs/`: Supplementary implementation and usage notes
+- `src/salesforce_integration/`: Core integration package (functions, sensors, operators)
+- `databricks.yml`: Primary Databricks Asset Bundle definition
+- `docs/`: Runbooks, setup guides, and archived context
+- `scripts/`: Operational helper scripts grouped by integration domain
+- `examples/`: Migration and sample workflow artifacts
+- `tests/manual/`: Manual validation scripts for direct API checks
 
 ## Functions
 

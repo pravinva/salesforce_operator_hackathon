@@ -21,12 +21,12 @@ connection_config = {
 try:
     # Create connection
     connection = w.connections.create(**connection_config)
-    
+
     print(f"\n✓ Connection created successfully!")
     print(f"  Name: {connection.name}")
     print(f"  Type: {connection.connection_type}")
     print(f"  Metastore: {connection.metastore_id}")
-    
+
     print("\n✓ Next step: Add OAuth credentials via UI")
     print(f"  1. Go to: {w.config.host}/explore/data/connections/{connection.name}")
     print(f"  2. Click 'Edit'")
@@ -35,17 +35,17 @@ try:
     print(f"     - Grant Type: Client Credentials or Password")
     print(f"     - Client ID: <SALESFORCE_CONSUMER_KEY>")
     print(f"     - Client Secret: <SALESFORCE_CONSUMER_SECRET>")
-    
+
 except Exception as e:
     print(f"\n✗ Error creating connection: {e}")
-    
+
     # Try to list existing connections
     print("\nExisting connections:")
     try:
         connections = list(w.connections.list())
         for conn in connections:
             print(f"  - {conn.name} ({conn.connection_type})")
-            
+
         # Check if salesforce_dev already exists
         existing = [c for c in connections if c.name == "salesforce_dev"]
         if existing:
@@ -54,4 +54,3 @@ except Exception as e:
             print(f"  databricks connections delete salesforce_dev --profile dogfood")
     except Exception as list_err:
         print(f"  Could not list connections: {list_err}")
-
