@@ -1,0 +1,549 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2114 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+(SALESFORCE ORCHESTRATOR API DOCUMENTATION) Tj
+T*
+() Tj
+T*
+(Overview) Tj
+T*
+() Tj
+T*
+(This document describes the public API surface for the Salesforce orchestrator used in the) Tj
+T*
+(hackathon implementation.) Tj
+T*
+() Tj
+T*
+(Package: salesforce_integration) Tj
+T*
+(Version: 1.0.1) Tj
+T*
+() Tj
+T*
+(Exports:) Tj
+T*
+(- salesforce_upsert) Tj
+T*
+(- salesforce_insert) Tj
+T*
+(- salesforce_update) Tj
+T*
+(- salesforce_delete) Tj
+T*
+(- SalesforceBulkWriteOperator) Tj
+T*
+(- SalesforceUpsertOperator) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(API Coverage Matrix) Tj
+T*
+() Tj
+T*
+(| Capability | API/Primitive | Coverage Status | Notes |) Tj
+T*
+(|---|---|---|---|) Tj
+T*
+(| Bulk upsert | salesforce_upsert | Covered | Supports external_id_field, optional wait |) Tj
+T*
+(| Bulk insert | salesforce_insert | Covered | Batch insert through Bulk API 2.0 |) Tj
+T*
+(| Bulk update | salesforce_update | Covered | Expects Salesforce Id in records |) Tj
+T*
+(| Bulk delete | salesforce_delete | Covered | Expects Salesforce Id in records |) Tj
+T*
+(| Generic bulk orchestration | SalesforceBulkWriteOperator | Covered |) Tj
+T*
+(insert/update/upsert/delete/hardDelete |) Tj
+T*
+(| Upsert operator wrapper | SalesforceUpsertOperator | Covered | Convenience wrapper over) Tj
+T*
+(generic operator |) Tj
+T*
+(| UC connection auth via proxy | internal request path | Covered | Uses conn_id + UC proxy |) Tj
+T*
+(| Connection base-path fallback | internal request path | Covered | Retries alternate path style) Tj
+T*
+(on 404 |) Tj
+T*
+(| CSV LF line-ending compliance | internal serialization | Covered | Uses LF for Salesforce) Tj
+T*
+(ingest compatibility |) Tj
+T*
+(| Task value propagation | functions/operators | Covered | Writes metadata best-effort to task) Tj
+T*
+(values |) Tj
+T*
+(| Deferrable sensor for Salesforce | N/A in this repo | Not in scope | Intentionally removed for) Tj
+T*
+(this implementation |) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Authentication Model) Tj
+T*
+() Tj
+T*
+(All API calls run through Databricks Unity Catalog Connection proxy endpoints.) Tj
+T*
+() Tj
+T*
+(Required runtime input:) Tj
+T*
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 1721 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+(- conn_id \(for example: salesforce_m2m_conn\)) Tj
+T*
+() Tj
+T*
+(No Salesforce credentials are embedded in source code.) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Functions API) Tj
+T*
+() Tj
+T*
+(All functions are designed for Databricks Python Operator task parameter binding.) Tj
+T*
+(records is accepted as JSON string input and converted internally.) Tj
+T*
+() Tj
+T*
+(salesforce_upsert\(object_name: str, external_id_field: str, records: str, conn_id: str,) Tj
+T*
+(api_version: str = "v60.0", wait_for_completion: bool = False\) -> dict) Tj
+T*
+() Tj
+T*
+(Creates a Bulk API 2.0 upsert job, uploads records, and closes the job.) Tj
+T*
+() Tj
+T*
+(Returns:) Tj
+T*
+(- job_id) Tj
+T*
+(- object) Tj
+T*
+(- operation) Tj
+T*
+(- state) Tj
+T*
+(- records_total) Tj
+T*
+(- api_version) Tj
+T*
+(- conn_id) Tj
+T*
+(- plus records_processed/records_failed when wait_for_completion=True) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(salesforce_insert\(object_name: str, records: str, conn_id: str, api_version: str = "v60.0",) Tj
+T*
+(wait_for_completion: bool = False\) -> dict) Tj
+T*
+() Tj
+T*
+(Bulk insert flow for new records.) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(salesforce_update\(object_name: str, records: str, conn_id: str, api_version: str = "v60.0",) Tj
+T*
+(wait_for_completion: bool = False\) -> dict) Tj
+T*
+() Tj
+T*
+(Bulk update flow for existing records \(records should include Salesforce Id\).) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(salesforce_delete\(object_name: str, records: str, conn_id: str, api_version: str = "v60.0",) Tj
+T*
+(wait_for_completion: bool = False\) -> dict) Tj
+T*
+() Tj
+T*
+(Bulk delete flow for existing records \(records should include Salesforce Id\).) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 1699 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+(Function Runtime Behavior) Tj
+T*
+() Tj
+T*
+(Common internal flow for all write functions:) Tj
+T*
+(1. Coerce and validate records payload) Tj
+T*
+(2. Convert records to CSV with Salesforce-compatible LF line endings) Tj
+T*
+(3. Create Bulk API ingest job) Tj
+T*
+(4. Upload batch CSV) Tj
+T*
+(5. Set job state to UploadComplete) Tj
+T*
+(6. Optionally poll to terminal state when wait_for_completion=True) Tj
+T*
+() Tj
+T*
+(Robustness features:) Tj
+T*
+(- UC proxy path fallback for host-only vs base_path-style connections) Tj
+T*
+(- best-effort task value writes \(salesforce_job_id, salesforce_object, salesforce_operation\)) Tj
+T*
+(- explicit error raising on create/upload/close failures) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Operators API) Tj
+T*
+() Tj
+T*
+(SalesforceBulkWriteOperator) Tj
+T*
+() Tj
+T*
+(Full lifecycle operator for external orchestration:) Tj
+T*
+(- open\(\) -> creates and submits Salesforce Bulk job) Tj
+T*
+(- poll\(\) -> checks job state and defers between checks) Tj
+T*
+(- close\(\) -> attempts cleanup/abort for non-terminal jobs) Tj
+T*
+() Tj
+T*
+(Supported operations:) Tj
+T*
+(- insert) Tj
+T*
+(- update) Tj
+T*
+(- upsert) Tj
+T*
+(- delete) Tj
+T*
+(- hardDelete) Tj
+T*
+() Tj
+T*
+(Constructor parameters:) Tj
+T*
+(- object_name: str) Tj
+T*
+(- operation: str) Tj
+T*
+(- records: str) Tj
+T*
+(- conn_id: str) Tj
+T*
+(- task_key: str) Tj
+T*
+(- external_id_field: str = "") Tj
+T*
+(- api_version: str = "v60.0") Tj
+T*
+(- poll_interval_minutes: int = 1) Tj
+T*
+() Tj
+T*
+(Poll outcomes:) Tj
+T*
+(- JobComplete -> SensorResult.completed\(\)) Tj
+T*
+(- Failed / Aborted -> raises exception) Tj
+T*
+(- transient states -> SensorResult.deferred\(...\)) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 1705 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+() Tj
+T*
+(SalesforceUpsertOperator) Tj
+T*
+() Tj
+T*
+(Convenience wrapper over SalesforceBulkWriteOperator with fixed operation="upsert".) Tj
+T*
+() Tj
+T*
+(Constructor:) Tj
+T*
+(- object_name) Tj
+T*
+(- external_id_field) Tj
+T*
+(- records) Tj
+T*
+(- conn_id) Tj
+T*
+(- task_key) Tj
+T*
+(- api_version) Tj
+T*
+(- poll_interval_minutes) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Databricks Task Usage Examples) Tj
+T*
+() Tj
+T*
+(Function task example) Tj
+T*
+(    python_operator_task:) Tj
+T*
+(      main: salesforce_integration.salesforce_upsert) Tj
+T*
+(      parameters:) Tj
+T*
+(        - name: object_name) Tj
+T*
+(          value: "Account") Tj
+T*
+(        - name: external_id_field) Tj
+T*
+(          value: "Account_Number_External__c") Tj
+T*
+(        - name: records) Tj
+T*
+(          value: '[{"Account_Number_External__c":"A001","Name":"Acme"}]') Tj
+T*
+(        - name: conn_id) Tj
+T*
+(          value: "salesforce_m2m_conn") Tj
+T*
+(        - name: wait_for_completion) Tj
+T*
+(          value: "true") Tj
+T*
+() Tj
+T*
+(Operator task example) Tj
+T*
+(    python_operator_task:) Tj
+T*
+(      main: salesforce_integration.SalesforceBulkWriteOperator) Tj
+T*
+(      parameters:) Tj
+T*
+(        - name: object_name) Tj
+T*
+(          value: "Account") Tj
+T*
+(        - name: operation) Tj
+T*
+(          value: "upsert") Tj
+T*
+(        - name: external_id_field) Tj
+T*
+(          value: "Account_Number_External__c") Tj
+T*
+(        - name: records) Tj
+T*
+(          value: '[{"Account_Number_External__c":"A001","Name":"Acme"}]') Tj
+T*
+(        - name: conn_id) Tj
+T*
+(          value: "salesforce_m2m_conn") Tj
+T*
+(        - name: task_key) Tj
+T*
+(          value: "upsert_with_operator") Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Length 1035 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Error Model) Tj
+T*
+() Tj
+T*
+(Failures surface as Python exceptions with contextual messages, including:) Tj
+T*
+(- UC proxy request failures \(status + response text\)) Tj
+T*
+(- validation failures for payload/schema) Tj
+T*
+(- terminal Salesforce job failures \(Failed, Aborted\)) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Deployment and Invocation) Tj
+T*
+() Tj
+T*
+(    python3 setup.py bdist_wheel) Tj
+T*
+(    databricks bundle validate --profile dogfood) Tj
+T*
+(    databricks bundle deploy --profile dogfood) Tj
+T*
+() Tj
+T*
+(    # Function workflow) Tj
+T*
+(    databricks bundle run salesforce_full_workflow --profile dogfood) Tj
+T*
+() Tj
+T*
+(    # Operator workflow) Tj
+T*
+(    databricks bundle run salesforce_upsert_operator --profile dogfood) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Notes) Tj
+T*
+() Tj
+T*
+(- This implementation is function/operator only \(no Salesforce sensor in repo scope\).) Tj
+T*
+(- Designed for hackathon demo plus production-oriented extension.) Tj
+T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Pages /Count 5 /Kids [ 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R ] >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+11 0 obj
+<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+12 0 obj
+<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
+endobj
+13 0 obj
+<< /Type /Catalog /Pages 7 0 R >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000002251 00000 n 
+0000004024 00000 n 
+0000005775 00000 n 
+0000007532 00000 n 
+0000008619 00000 n 
+0000008705 00000 n 
+0000008831 00000 n 
+0000008957 00000 n 
+0000009084 00000 n 
+0000009211 00000 n 
+0000009338 00000 n 
+trailer
+<< /Size 14 /Root 13 0 R >>
+startxref
+9388
+%%EOF

@@ -1,0 +1,428 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 1566 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+(SALESFORCE ORCHESTRATOR MIGRATION GUIDE) Tj
+T*
+() Tj
+T*
+(Purpose) Tj
+T*
+() Tj
+T*
+(This guide documents how to migrate Salesforce reverse ETL orchestration from Airflow-style) Tj
+T*
+(custom tasks to the Databricks Salesforce orchestrator in this repository.) Tj
+T*
+() Tj
+T*
+(Scope:) Tj
+T*
+(- function-based execution) Tj
+T*
+(- operator-based execution) Tj
+T*
+(- Unity Catalog connection-based authentication) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Migration Summary) Tj
+T*
+() Tj
+T*
+(Source Pattern \(Airflow/Custom\)) Tj
+T*
+() Tj
+T*
+(Typical legacy flow:) Tj
+T*
+(1. extract records from warehouse or table) Tj
+T*
+(2. call Salesforce client/custom script) Tj
+T*
+(3. manually manage batching, retries, and polling) Tj
+T*
+(4. surface success/failure in scheduler logs) Tj
+T*
+() Tj
+T*
+(Common issues:) Tj
+T*
+(- repeated custom logic per DAG) Tj
+T*
+(- inconsistent error handling and observability) Tj
+T*
+(- credential sprawl) Tj
+T*
+(- difficult standardization across teams) Tj
+T*
+() Tj
+T*
+(Target Pattern \(Databricks\)) Tj
+T*
+() Tj
+T*
+(Use the package primitives in salesforce_integration:) Tj
+T*
+(- Functions:) Tj
+T*
+(  - salesforce_upsert) Tj
+T*
+(  - salesforce_insert) Tj
+T*
+(  - salesforce_update) Tj
+T*
+(  - salesforce_delete) Tj
+T*
+(- Operators:) Tj
+T*
+(  - SalesforceBulkWriteOperator) Tj
+T*
+(  - SalesforceUpsertOperator) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Concept Mapping) Tj
+T*
+() Tj
+T*
+(| Legacy concept | Databricks equivalent |) Tj
+T*
+(|---|---|) Tj
+T*
+(| Airflow PythonOperator for write | python_operator_task with) Tj
+T*
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 1897 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+(salesforce_integration.salesforce_* |) Tj
+T*
+(| Airflow custom operator | python_operator_task with) Tj
+T*
+(salesforce_integration.SalesforceBulkWriteOperator |) Tj
+T*
+(| Scheduler variable/connection secrets | Unity Catalog connection \(conn_id\) |) Tj
+T*
+(| Manual polling loop in DAG code | Operator poll\(\) lifecycle |) Tj
+T*
+(| Custom cleanup logic | Operator close\(\) lifecycle |) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Migration Path A: Function Workflow) Tj
+T*
+() Tj
+T*
+(Recommended when you want straightforward task-per-operation execution.) Tj
+T*
+() Tj
+T*
+(Example task shape) Tj
+T*
+() Tj
+T*
+(    python_operator_task:) Tj
+T*
+(      main: salesforce_integration.salesforce_upsert) Tj
+T*
+(      parameters:) Tj
+T*
+(        - name: object_name) Tj
+T*
+(          value: "Account") Tj
+T*
+(        - name: external_id_field) Tj
+T*
+(          value: "Account_Number_External__c") Tj
+T*
+(        - name: records) Tj
+T*
+(          value: '[{"Account_Number_External__c":"A001","Name":"Acme"}]') Tj
+T*
+(        - name: conn_id) Tj
+T*
+(          value: "salesforce_m2m_conn") Tj
+T*
+(        - name: wait_for_completion) Tj
+T*
+(          value: "true") Tj
+T*
+() Tj
+T*
+(Use this path when) Tj
+T*
+(- each task can run to completion in one call) Tj
+T*
+(- minimal orchestration complexity is needed) Tj
+T*
+(- you want simplest migration from direct script calls) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Migration Path B: Operator Workflow) Tj
+T*
+() Tj
+T*
+(Recommended when you need lifecycle semantics \(open/poll/close\) for external orchestration.) Tj
+T*
+() Tj
+T*
+(Example task shape) Tj
+T*
+() Tj
+T*
+(    python_operator_task:) Tj
+T*
+(      main: salesforce_integration.SalesforceBulkWriteOperator) Tj
+T*
+(      parameters:) Tj
+T*
+(        - name: object_name) Tj
+T*
+(          value: "Account") Tj
+T*
+(        - name: operation) Tj
+T*
+(          value: "upsert") Tj
+T*
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 1704 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+(        - name: external_id_field) Tj
+T*
+(          value: "Account_Number_External__c") Tj
+T*
+(        - name: records) Tj
+T*
+(          value: '[{"Account_Number_External__c":"A001","Name":"Acme"}]') Tj
+T*
+(        - name: conn_id) Tj
+T*
+(          value: "salesforce_m2m_conn") Tj
+T*
+(        - name: task_key) Tj
+T*
+(          value: "upsert_with_operator") Tj
+T*
+() Tj
+T*
+(Use this path when) Tj
+T*
+(- you need explicit long-running external lifecycle management) Tj
+T*
+(- you want standardized polling and cleanup behavior) Tj
+T*
+(- you are replacing custom Airflow operator-style code) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Authentication Migration) Tj
+T*
+() Tj
+T*
+(Move from raw credentials to Unity Catalog connection references:) Tj
+T*
+() Tj
+T*
+(- Old: username/password/token in scheduler variables or env vars) Tj
+T*
+(- New: conn_id to UC connection configured in workspace) Tj
+T*
+() Tj
+T*
+(Result:) Tj
+T*
+(- centralized governance) Tj
+T*
+(- no credentials in pipeline code) Tj
+T*
+(- easier rotation and control) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Data Contract Expectations) Tj
+T*
+() Tj
+T*
+(Records parameter) Tj
+T*
+(- pass JSON string \(Databricks task parameter\)) Tj
+T*
+(- function/operator coerces to list of dicts) Tj
+T*
+() Tj
+T*
+(Field requirements) Tj
+T*
+(- upsert requires external_id_field) Tj
+T*
+(- update/delete require Salesforce Id field in each record) Tj
+T*
+() Tj
+T*
+(CSV formatting) Tj
+T*
+(- orchestrator emits Salesforce-compatible LF line endings) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Validation Checklist) Tj
+T*
+() Tj
+T*
+(- [ ] UC connection configured and accessible) Tj
+T*
+(- [ ] conn_id points to M2M-ready Salesforce connection) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 1010 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 742 Td
+(- [ ] function job runs success \(salesforce_full_workflow\)) Tj
+T*
+(- [ ] operator job runs success \(salesforce_upsert_operator\)) Tj
+T*
+(- [ ] target records visible in Salesforce object) Tj
+T*
+(- [ ] failure behavior tested with invalid payload case) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Deployment Commands) Tj
+T*
+() Tj
+T*
+(    cd /Users/pravin.varma/Documents/Demo/salesforce_operator_hackathon) Tj
+T*
+(    python3 setup.py bdist_wheel) Tj
+T*
+(    databricks bundle validate --profile dogfood) Tj
+T*
+(    databricks bundle deploy --profile dogfood) Tj
+T*
+() Tj
+T*
+(Run function path:) Tj
+T*
+(    databricks bundle run salesforce_full_workflow --profile dogfood) Tj
+T*
+() Tj
+T*
+(Run operator path:) Tj
+T*
+(    databricks bundle run salesforce_upsert_operator --profile dogfood) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(Notes) Tj
+T*
+() Tj
+T*
+(- This repository intentionally excludes Salesforce sensor implementation.) Tj
+T*
+(- Migration scope is function/operator only.) Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Pages /Count 4 /Kids [ 7 0 R 8 0 R 9 0 R 10 0 R ] >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+11 0 obj
+<< /Type /Catalog /Pages 6 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000001703 00000 n 
+0000003652 00000 n 
+0000005408 00000 n 
+0000006470 00000 n 
+0000006548 00000 n 
+0000006674 00000 n 
+0000006800 00000 n 
+0000006926 00000 n 
+0000007053 00000 n 
+trailer
+<< /Size 12 /Root 11 0 R >>
+startxref
+7103
+%%EOF

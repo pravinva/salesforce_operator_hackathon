@@ -1,0 +1,311 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+4 0 obj
+<< /Length 3190 >>
+stream
+BT
+/F2 24.00 Tf
+1 0 0 1 50.00 786.00 Tm
+(Salesforce Migration Guide) Tj
+ET
+BT
+/F1 13.00 Tf
+1 0 0 1 50.00 752.00 Tm
+(Airflow to Databricks Jobs Orchestrator) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 728.00 Tm
+(Generated from existing migration documentation) Tj
+ET
+50.00 700.00 m 545.00 700.00 l S
+BT
+/F2 18.00 Tf
+1 0 0 1 50.00 678.00 Tm
+(Airflow to Databricks Salesforce Migration Guide) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 646.00 Tm
+(This guide shows how to migrate a typical Airflow Salesforce DAG to the Databricks Python) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 631.00 Tm
+(Operator task pattern implemented in this repository.) Tj
+ET
+BT
+/F2 14.00 Tf
+1 0 0 1 50.00 604.00 Tm
+(Why migrate) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 578.00 Tm
+(? Reduce orchestration glue code \(custom Airflow operators/sensors\).) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 564.00 Tm
+(? Keep task runtime, retries, logs, and deployment in one Databricks surface.) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 550.00 Tm
+(? Reuse the same Salesforce primitives as either functions or operators.) Tj
+ET
+BT
+/F2 14.00 Tf
+1 0 0 1 50.00 526.00 Tm
+(Concept mapping) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 500.00 Tm
+(Airflow pattern | Databricks equivalent in this repo) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 486.00 Tm
+(--- | ---) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 472.00 Tm
+(`PythonOperator` calling Salesforce SDK | `salesforce_api.salesforce_insert` /) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 460.00 Tm
+(`salesforce_upsert` / `salesforce_update`) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 446.00 Tm
+(Custom `BaseOperator` for long-running Salesforce bulk jobs |) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 434.00 Tm
+(`salesforce_api.SalesforceBulkWriteOperator` / `SalesforceUpsertOperator`) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 420.00 Tm
+(Separate `Sensor` task waiting on bulk job completion | Operator `poll\(\)` lifecycle or) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 408.00 Tm
+(function with `wait_for_completion=true`) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 394.00 Tm
+(XCom handoff of job IDs and counters | `dbutils.jobs.taskValues`) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 380.00 Tm
+(Airflow DAG deployment + env packaging | Databricks Asset Bundle \(`databricks.yml` +) Tj
+ET
+BT
+/F3 9.00 Tf
+1 0 0 1 56.00 368.00 Tm
+(`resources/*.yml`\)) Tj
+ET
+BT
+/F2 14.00 Tf
+1 0 0 1 50.00 344.00 Tm
+(Before: actual Airflow DAG in this repo) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 318.00 Tm
+(Source DAG file:) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 293.00 Tm
+(? `airflow_dags/salesforce_bulk_migration_source_dag.py`) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 271.00 Tm
+(That DAG is the concrete migration source artifact for this hackathon.) Tj
+ET
+BT
+/F2 14.00 Tf
+1 0 0 1 50.00 244.00 Tm
+(After: Databricks migrated workflow) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 218.00 Tm
+(Use the job defined in:) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 193.00 Tm
+(? `resources/salesforce_airflow_migration.yml`) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 171.00 Tm
+(It includes:) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 146.00 Tm
+(1. `airflow_migrated_insert_fn` \(function\)) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 132.00 Tm
+(2. `airflow_migrated_upsert_operator` \(operator\)) Tj
+ET
+BT
+/F1 9.00 Tf
+1 0 0 1 50.00 36.00 Tm
+(Page 1) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 1968 >>
+stream
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 786.00 Tm
+(3. `airflow_migrated_update_fn` \(function\)) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 764.00 Tm
+(This demonstrates a practical migration path where you keep straightforward steps as functions) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 749.00 Tm
+(and move lifecycle-heavy steps to operators.) Tj
+ET
+BT
+/F2 14.00 Tf
+1 0 0 1 50.00 722.00 Tm
+(Migration checklist) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 696.00 Tm
+(1. Move connection details into UC HTTP connection \(`salesforce_m2m_conn`\).) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 682.00 Tm
+(2. Replace custom Salesforce SDK calls with repo primitives:) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 668.00 Tm
+(? `salesforce_insert`, `salesforce_upsert`, `salesforce_update`) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 654.00 Tm
+(? `SalesforceBulkWriteOperator`, `SalesforceUpsertOperator`) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 640.00 Tm
+(3. Translate task dependency graph from Airflow to Databricks job tasks.) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 626.00 Tm
+(4. Replace XCom payloads with `taskValues` only when needed.) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 612.00 Tm
+(5. Deploy and test with:) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 598.00 Tm
+(? `databricks bundle deploy --profile dogfood`) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 584.00 Tm
+(? `databricks bundle run salesforce_airflow_migration_demo --profile dogfood`) Tj
+ET
+BT
+/F2 14.00 Tf
+1 0 0 1 50.00 560.00 Tm
+(Notes) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 534.00 Tm
+(? Functions are blocking when `wait_for_completion=true`.) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 520.00 Tm
+(? Operators encapsulate `open/poll/close` for external job lifecycle control.) Tj
+ET
+BT
+/F1 10.00 Tf
+1 0 0 1 50.00 506.00 Tm
+(? For hackathon demonstrations, this migration pattern is the direct answer to) Tj
+ET
+BT
+/F1 10.50 Tf
+1 0 0 1 50.00 492.00 Tm
+("How do we replace Airflow operator maintenance with Databricks-native tasks?") Tj
+ET
+BT
+/F1 9.00 Tf
+1 0 0 1 50.00 36.00 Tm
+(Page 2) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Pages /Count 2 /Kids [ 7 0 R 8 0 R ] >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 4 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 5 0 R >>
+endobj
+9 0 obj
+<< /Type /Catalog /Pages 6 0 R >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000000160 00000 n 
+0000000228 00000 n 
+0000003470 00000 n 
+0000005490 00000 n 
+0000005555 00000 n 
+0000005701 00000 n 
+0000005847 00000 n 
+trailer
+<< /Size 10 /Root 9 0 R >>
+startxref
+5896
+%%EOF
