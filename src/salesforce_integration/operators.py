@@ -126,12 +126,32 @@ class SalesforceBulkWriteOperator(OperatorV0):
 
         last_response: Optional[requests.Response] = None
         for idx, candidate_path in enumerate(candidate_paths):
-            response = requests.request(
-                method,
-                f"{self.proxy_base_url}{candidate_path}",
-                headers=merged_headers,
-                **kwargs,
-            )
+            for attempt in range(2):
+                auth_headers = self.w.config.authenticate()
+                merged_headers = {
+                    **auth_headers,
+                    "Accept": "application/json",
+                    "Accept-Encoding": "identity",
+                }
+                if headers:
+                    merged_headers.update(headers)
+                response = requests.request(
+                    method,
+                    f"{self.proxy_base_url}{candidate_path}",
+                    headers=merged_headers,
+                    **kwargs,
+                )
+                if (
+                    attempt == 0
+                    and response.status_code == 401
+                    and "INVALID_SESSION_ID" in response.text
+                ):
+                    print(
+                        "[SalesforceBulkWriteOperator] received INVALID_SESSION_ID; "
+                        "retrying request once..."
+                    )
+                    continue
+                break
             last_response = response
             should_fallback = (
                 idx == 0

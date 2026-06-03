@@ -66,19 +66,36 @@ def _request_salesforce(
     proxy_base_url = f"{w.config.host}/api/2.0/unity-catalog/connections/{conn_id}/proxy"
     candidate_paths = [f"/services/data/{api_version}{resource_path}", resource_path]
 
-    merged_headers = {
-        **w.config.authenticate(),
-        "Accept": "application/json",
-        "Accept-Encoding": "identity",
-    }
-    if kwargs.get("headers"):
-        merged_headers.update(kwargs["headers"])
-    kwargs["headers"] = merged_headers
-
     last_response = None
     for idx, path in enumerate(candidate_paths):
-        response = requests.request(method, f"{proxy_base_url}{path}", **kwargs)
-        last_response = response
+        for attempt in range(2):
+            merged_headers = {
+                **w.config.authenticate(),
+                "Accept": "application/json",
+                "Accept-Encoding": "identity",
+            }
+            if kwargs.get("headers"):
+                merged_headers.update(kwargs["headers"])
+
+            request_kwargs = dict(kwargs)
+            request_kwargs["headers"] = merged_headers
+            response = requests.request(
+                method,
+                f"{proxy_base_url}{path}",
+                **request_kwargs,
+            )
+            last_response = response
+            if (
+                attempt == 0
+                and response.status_code == 401
+                and "INVALID_SESSION_ID" in response.text
+            ):
+                print(
+                    "[salesforce_integration] received INVALID_SESSION_ID; "
+                    "retrying request once..."
+                )
+                continue
+            break
         should_fallback = idx == 0 and response.status_code == 404
         if not should_fallback:
             return response
